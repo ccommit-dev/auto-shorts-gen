@@ -36,7 +36,12 @@ def build_providers(settings: Settings, *, dry_run: bool, video_provider: str | 
                          SilentTTSProvider(), KenBurnsVideoProvider())
 
     sp = script_provider or "gemini"
-    script = ClaudeScriptProvider(settings) if sp == "claude" else GeminiScriptProvider(settings, ledger)
+    if sp == "claude":
+        script = ClaudeScriptProvider(settings)
+    elif sp == "placeholder":
+        script = PlaceholderScriptProvider()
+    else:
+        script = GeminiScriptProvider(settings, ledger)
 
     local_img = _first_file(assets / "images", (".png", ".jpg", ".jpeg"))
     ip = image_provider or ("local" if local_img else "pollinations")
