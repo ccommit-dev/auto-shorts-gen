@@ -103,7 +103,15 @@ NVIDIA GPU(16GB VRAM 권장, RTX 5060 Ti에서 확인)가 있으면 오픈소스
 .venv\Scripts\python -m pip install -r requirements-gpu.txt
 ```
 
+모델을 미리 받아 두면 첫 실행이 빠릅니다(프로젝트 `models/` 폴더, HF 캐시의 심볼릭 링크 권한 문제를 피함):
+
+```bash
+.venv\Scripts\python scripts\download_models.py
+```
+
 - `--video-provider auto`(기본)는 GPU + diffusers가 있으면 자동으로 `ltx`를 씁니다. 강제하려면 `--video-provider ltx`.
+- RTX 5060 Ti 16GB 기준 영상 1개에 약 7분(모델 로드 1분 + 생성 2분 + 합성). VRAM 약 11.5GB.
+- RTX 50 시리즈에서는 cuDNN 어텐션이 매우 느리거나 CUDA 오류를 내므로 `LTX_ATTENTION_BACKEND=_native_efficient`가 기본입니다. VRAM이 넘치면 Windows가 시스템 RAM으로 넘겨 수십 배 느려지니 `LTX_WIDTH/HEIGHT/NUM_FRAMES`를 줄이세요.
 - 생성 설정은 `.env`의 `LTX_MODEL`, `LTX_WIDTH/HEIGHT`(32의 배수), `LTX_NUM_FRAMES`(8k+1), `LTX_STEPS`, `LTX_GUIDANCE`, `LTX_SEED`.
 - 5초 남짓의 AI 클립을 만들고 왕복(ping-pong) 반복으로 영상 길이를 채웁니다. 프롬프트에 "마이크에 대고 말하며 입이 움직인다"가 들어가 대사 구간에서 말하는 것처럼 보입니다.
 - GPU가 없으면 `kenburns`가 대신 동작합니다. 이때도 동물 대사 구간에서만 통통 튀는 퍼펫 모션이 들어가 누가 말하는지 보입니다.
