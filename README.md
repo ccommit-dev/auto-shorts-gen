@@ -13,7 +13,7 @@
 |---|---|---|
 | 대본 | Gemini Flash 무료 티어 | Claude (Anthropic API) |
 | 장면 이미지 | pollinations.ai (키 불필요) / `assets/images`의 내 파일 | Gemini 이미지 생성 |
-| 이미지→영상 | ffmpeg 줌/팬 모션 / `assets/clips`의 내 mp4 | Kling 3.0 API |
+| 이미지→영상 | **로컬 GPU AI(LTX-Video, 오픈소스)** / ffmpeg 퍼펫 모션 / `assets/clips`의 내 mp4 | Kling 3.0 API |
 | 음성 | edge-tts (한국어 신경망 음성) | ElevenLabs |
 | 합성/자막 | ffmpeg (자동 동봉) | - |
 | 배포 | YouTube Data API, Instagram Graph API | - |
@@ -89,6 +89,24 @@ output/20260904_150000_장사_잘하는법/
   meta.txt        업로드용 제목/설명/해시태그
   manifest.json   단계 상태, 배포 결과
 ```
+
+## 강아지가 실제로 움직이게 (무료, NVIDIA GPU)
+
+NVIDIA GPU(16GB VRAM 권장, RTX 5060 Ti에서 확인)가 있으면 오픈소스 **LTX-Video 2B** 모델로 장면 이미지를
+실제 영상으로 만듭니다. 비용은 없고 모델 파일(약 24GB)을 처음 한 번 내려받습니다.
+
+```bash
+.venv\Scripts\python -m pip install --index-url https://download.pytorch.org/whl/cu128 torch==2.9.1
+```
+
+```bash
+.venv\Scripts\python -m pip install -r requirements-gpu.txt
+```
+
+- `--video-provider auto`(기본)는 GPU + diffusers가 있으면 자동으로 `ltx`를 씁니다. 강제하려면 `--video-provider ltx`.
+- 생성 설정은 `.env`의 `LTX_MODEL`, `LTX_WIDTH/HEIGHT`(32의 배수), `LTX_NUM_FRAMES`(8k+1), `LTX_STEPS`, `LTX_GUIDANCE`, `LTX_SEED`.
+- 5초 남짓의 AI 클립을 만들고 왕복(ping-pong) 반복으로 영상 길이를 채웁니다. 프롬프트에 "마이크에 대고 말하며 입이 움직인다"가 들어가 대사 구간에서 말하는 것처럼 보입니다.
+- GPU가 없으면 `kenburns`가 대신 동작합니다. 이때도 동물 대사 구간에서만 통통 튀는 퍼펫 모션이 들어가 누가 말하는지 보입니다.
 
 ## 내 소재 쓰기 (무료로 품질 올리기)
 

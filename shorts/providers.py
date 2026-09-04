@@ -9,7 +9,8 @@ from .image_gen import (GeminiImageProvider, ImageProvider, LocalImageProvider, 
 from .script_gen import ClaudeScriptProvider, GeminiScriptProvider, PlaceholderScriptProvider, ScriptProvider
 from .tts import EdgeTTSProvider, ElevenLabsTTSProvider, SilentTTSProvider, TTSProvider
 from .usage_ledger import UsageLedger
-from .video_gen import KenBurnsVideoProvider, KlingVideoProvider, LocalClipProvider, VideoProvider
+from .video_gen import (KenBurnsVideoProvider, KlingVideoProvider, LocalAIVideoProvider, LocalClipProvider,
+                        VideoProvider, ltx_available)
 
 
 @dataclass
@@ -60,13 +61,17 @@ def build_providers(settings: Settings, *, dry_run: bool, video_provider: str | 
     tts = ElevenLabsTTSProvider(settings) if tp == "elevenlabs" else EdgeTTSProvider(settings)
 
     local_clip = _first_file(assets / "clips", (".mp4", ".mov"))
-    vp = video_provider or ("local" if local_clip else "kenburns")
+    vp = video_provider or settings.video_provider
+    if vp == "auto":
+        vp = "local" if local_clip else ("ltx" if ltx_available() else "kenburns")
     if vp == "local":
         if not local_clip:
             raise RuntimeError("assets/clips 에 mp4가 없습니다")
         video = LocalClipProvider(local_clip)
     elif vp == "kling":
         video = KlingVideoProvider(settings)
+    elif vp == "ltx":
+        video = LocalAIVideoProvider(settings)
     else:
         video = KenBurnsVideoProvider()
     return Providers(script, image, tts, video)

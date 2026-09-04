@@ -128,7 +128,7 @@ def run_pipeline(settings: Settings, providers: Providers, topic: str, *, run_di
     total = total_duration(cues)
 
     _step(manifest, "motion",
-          lambda: providers.video.generate(paths.scene_png, script.scene_prompt, total, paths.motion_mp4))
+          lambda: providers.video.generate(paths.scene_png, script.scene_prompt, total, paths.motion_mp4, cues=cues))
 
     font = resolve_font(settings.font_path)
 

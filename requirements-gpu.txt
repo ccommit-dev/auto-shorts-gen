@@ -1,0 +1,10 @@
+# 로컬 무료 AI 영상 생성 (NVIDIA GPU, 16GB VRAM 권장). 먼저 CUDA 빌드 torch 설치:
+#   .venv\Scripts\python -m pip install --index-url https://download.pytorch.org/whl/cu128 torch==2.9.1
+diffusers>=0.36
+transformers>=4.50
+accelerate
+sentencepiece
+protobuf
+huggingface_hub[hf_xet]
+imageio
+numpy

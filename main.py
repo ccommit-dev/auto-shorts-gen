@@ -19,8 +19,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--image-provider", choices=["pollinations", "gemini", "local", "placeholder"],
                    help="기본 pollinations(무료). assets/images 에 파일이 있으면 local")
     p.add_argument("--tts-provider", choices=["edge", "elevenlabs"], help="기본 edge(무료)")
-    p.add_argument("--video-provider", choices=["kenburns", "local", "kling"],
-                   help="기본 kenburns(무료). assets/clips 에 mp4가 있으면 local")
+    p.add_argument("--video-provider", choices=["auto", "kenburns", "local", "ltx", "kling"],
+                   help="기본 auto: assets/clips 에 mp4가 있으면 local, NVIDIA GPU가 있으면 ltx(로컬 AI), 아니면 kenburns")
     p.add_argument("--resume", help="기존 실행 폴더를 이어서 실행")
     p.add_argument("--check", action="store_true", help="환경/키/쿼터 점검만 하고 종료")
     p.add_argument("--no-dotenv", action="store_true", help=".env 를 읽지 않음(테스트용)")

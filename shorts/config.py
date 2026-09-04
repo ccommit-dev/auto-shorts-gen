@@ -37,6 +37,16 @@ class Settings:
     elevenlabs_api_key: str | None = None
     elevenlabs_voice_animal: str = "EXAVITQu4vr4xnSDxMaL"
     elevenlabs_voice_reporter: str = "JBFqnCBsd6RMkjVDRZzb"
+    # 로컬 AI 영상 (무료, NVIDIA GPU)
+    video_provider: str = "auto"  # auto | kenburns | local | ltx | kling
+    ltx_model: str = "Lightricks/LTX-Video-0.9.5"
+    models_dir: str = "models"  # 다운로드한 모델 폴더 (HF 캐시의 심볼릭 링크 문제 회피)
+    ltx_width: int = 512
+    ltx_height: int = 896
+    ltx_num_frames: int = 121
+    ltx_steps: int = 40
+    ltx_guidance: float = 3.0
+    ltx_seed: int = 42
     # 렌더링/출력
     font_path: str = "C:/Windows/Fonts/malgunbd.ttf"
     output_dir: str = "output"
@@ -72,6 +82,15 @@ class Settings:
             elevenlabs_api_key=g("ELEVENLABS_API_KEY") or None,
             elevenlabs_voice_animal=g("ELEVENLABS_VOICE_ANIMAL") or cls.elevenlabs_voice_animal,
             elevenlabs_voice_reporter=g("ELEVENLABS_VOICE_REPORTER") or cls.elevenlabs_voice_reporter,
+            video_provider=(g("VIDEO_PROVIDER") or cls.video_provider).lower(),
+            ltx_model=g("LTX_MODEL") or cls.ltx_model,
+            models_dir=g("MODELS_DIR") or cls.models_dir,
+            ltx_width=_int(g("LTX_WIDTH"), cls.ltx_width),
+            ltx_height=_int(g("LTX_HEIGHT"), cls.ltx_height),
+            ltx_num_frames=_int(g("LTX_NUM_FRAMES"), cls.ltx_num_frames),
+            ltx_steps=_int(g("LTX_STEPS"), cls.ltx_steps),
+            ltx_guidance=float(g("LTX_GUIDANCE") or cls.ltx_guidance),
+            ltx_seed=_int(g("LTX_SEED"), cls.ltx_seed),
             font_path=g("FONT_PATH") or cls.font_path,
             output_dir=g("OUTPUT_DIR") or cls.output_dir,
             assets_dir=g("ASSETS_DIR") or cls.assets_dir,
