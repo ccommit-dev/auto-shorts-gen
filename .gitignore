@@ -1,0 +1,9 @@
+.venv/
+output/
+__pycache__/
+*.pyc
+.env
+token.json
+client_secrets.json
+.pytest_cache/
+.idea/

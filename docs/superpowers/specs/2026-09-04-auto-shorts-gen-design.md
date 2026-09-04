@@ -1,5 +1,12 @@
 # auto-shorts-gen 설계 스펙 (2026-09-04)
 
+## 구현 중 확정된 변경점 (2026-09-04)
+- **이미지 기본 공급자는 pollinations.ai**(키 불필요, 무료). Gemini 이미지 생성은 공식 가격표상 무료 티어가 없어 유료 게이트로 이동.
+- **truststore**로 OS 인증서 저장소 사용(`USE_OS_TRUSTSTORE=true`). 사내망 SSL 검사 환경에서 Python 기본 인증서로는 모든 HTTPS가 실패함.
+- **Kling은 현행 API**(`Authorization: Bearer <API key>`, `POST /image-to-video/kling-3.0`, `GET /tasks?external_task_ids=`)로 구현. 유료 게이트.
+- `--script-provider placeholder`로 키 없이 고정 샘플 대본으로 실제 이미지/음성 경로를 검증 가능.
+- 무료 상한 키: `GEMINI_DAILY_TEXT_CAP`(50), `POLLINATIONS_DAILY_CAP`(100). ffprobe 미동봉이라 길이/해상도는 `ffmpeg -i` 파싱.
+
 ## 목적
 강아지/고양이가 사람처럼 행동하는 코믹 AI 쇼츠(15초 내외, 9:16)를 주제 하나로 자동 생성하고,
 계정/권한만 설정하면 유튜브 쇼츠·인스타 릴스에 자동 배포하는 Python CLI.
@@ -8,7 +15,7 @@
 하단 굵은 자막이 대사에 맞춰 바뀜, 음성 더빙.
 
 ## 비용 원칙 (최우선 제약)
-- 기본 설정은 **전부 무료**: Gemini 무료 티어(대본·이미지), edge-tts(음성), ffmpeg(모션·합성),
+- 기본 설정은 **전부 무료**: Gemini 무료 티어(대본), pollinations.ai(이미지), edge-tts(음성), ffmpeg(모션·합성),
   YouTube Data API / Instagram Graph API(배포, 무료).
 - **유료 경로는 기본 차단**. `ALLOW_PAID=true`를 명시하지 않으면 Claude, Kling, ElevenLabs 등
   유료 공급자는 키가 있어도 `PaidProviderBlocked` 예외로 실행을 중단한다.
