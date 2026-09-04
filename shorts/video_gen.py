@@ -85,11 +85,10 @@ class LocalClipProvider:
 
 
 MOTION_PROMPT = (
-    "The animal talks animatedly into the microphone, mouth moving as if speaking, head tilting, "
-    "ears twitching, paws gesturing, natural blinking; the interviewer's hand holds the microphone steady; "
-    "warm street lights flicker softly; camera slowly pushes in; smooth realistic motion, high quality"
+    "The animal stays in place and talks into the microphone: mouth moving as if speaking, small head nods, "
+    "ears twitching, blinking, subtle paw gestures; steady camera, gentle natural motion"
 )
-NEGATIVE_PROMPT = "worst quality, inconsistent motion, blurry, jittery, distorted, extra limbs, text, watermark"
+NEGATIVE_PROMPT = "worst quality, fast motion, spinning, camera shake, blurry, jittery, distorted, extra limbs, text, watermark"
 
 
 def ltx_model_path(settings: Settings) -> str:
@@ -125,9 +124,15 @@ class LocalAIVideoProvider:
         if self._pipe is None:
             import torch
             from diffusers import LTXConditionPipeline
-            pipe = LTXConditionPipeline.from_pretrained(ltx_model_path(self.s), torch_dtype=torch.bfloat16)
-            pipe.enable_model_cpu_offload()  # 16GB급 GPU에서 T5 텍스트 인코더와 트랜스포머를 번갈아 올림
+            # RTX 50(sm_120)에서 cuDNN SDPA 는 플랜 생성이 매우 느리거나 CUDA 오류를 내므로 끈다
+            torch.backends.cuda.enable_cudnn_sdp(False)
+            pipe = LTXConditionPipeline.from_pretrained(ltx_model_path(self.s), dtype=torch.bfloat16)
+            # 기본 디스패치가 MATH 경로로 떨어지면 VRAM 초과 → Windows 가 시스템 RAM 으로 넘겨 극도로 느려진다.
+            # 메모리 효율 SDPA 를 명시하면 512x896x97 이 11.5GB, 스텝당 ~5초 (RTX 5060 Ti 16GB 기준).
+            pipe.transformer.set_attention_backend(self.s.ltx_attention_backend)
+            pipe.enable_model_cpu_offload()  # T5 텍스트 인코더와 트랜스포머를 번갈아 GPU 에 올림
             pipe.vae.enable_tiling()
+            pipe.set_progress_bar_config(desc="LTX-Video", leave=False)
             self._pipe = pipe
         return self._pipe
 
@@ -144,7 +149,7 @@ class LocalAIVideoProvider:
         num_frames = self.s.ltx_num_frames  # 8k+1
         generator = torch.Generator(device="cuda").manual_seed(self.s.ltx_seed)
         frames = pipe(
-            prompt=f"{prompt}. {MOTION_PROMPT}",
+            prompt=f"{prompt[:300]}. {MOTION_PROMPT}",  # T5 최대 128 토큰 안에 들어오도록 장면 프롬프트를 자른다
             negative_prompt=NEGATIVE_PROMPT,
             image=image,
             width=width, height=height, num_frames=num_frames,
