@@ -9,7 +9,7 @@ from typing import Protocol
 
 from .config import Settings
 from .cost_guard import ensure_allowed
-from .ffmpeg_tools import run_ffmpeg
+from .ffmpeg_tools import probe_duration, run_ffmpeg
 from .timing import Cue
 
 FPS = 30
@@ -20,22 +20,59 @@ class VideoProvider(Protocol):
                  cues: list[Cue] | None = None) -> Path: ...
 
 
+_FIT_VF = f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps={FPS},format=yuv420p"
+
+
 def loop_fit_clip(src: Path, duration: float, out_path: Path) -> Path:
-    """클립을 반복/잘라 정확히 duration 초, 1080x1920으로 맞춘다."""
+    """클립을 앞으로만 반복/잘라 정확히 duration 초, 1080x1920으로 맞춘다."""
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    run_ffmpeg(["-stream_loop", "-1", "-i", str(src), "-t", f"{duration:.3f}",
-                "-vf", f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps={FPS},format=yuv420p",
+    run_ffmpeg(["-stream_loop", "-1", "-i", str(src), "-t", f"{duration:.3f}", "-vf", _FIT_VF,
                 "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", str(out_path)])
     return out_path
 
 
-def pingpong_clip(src: Path, out_path: Path) -> Path:
-    """클립 + 역재생을 이어 붙여 끊김 없이 반복 가능한 왕복 클립을 만든다."""
+def speaker_segments(cues: list[Cue] | None, total: float) -> list[tuple[float, float, str]]:
+    """타임라인을 (start, end, 'talk'|'listen') 구간으로 나눈다. 동물 대사만 talk, 나머지(기자·간격)는 listen."""
+    segs: list[tuple[float, float, str]] = []
+    t = 0.0
+    for c in sorted(cues or [], key=lambda c: c.start):
+        if c.speaker != "animal":
+            continue
+        if c.start > t:
+            segs.append((t, c.start, "listen"))
+        segs.append((max(t, c.start), c.end, "talk"))
+        t = c.end
+    if t < total:
+        segs.append((t, total, "listen"))
+    return [(round(s, 3), round(e, 3), k) for s, e, k in segs if e - s > 0.01]
+
+
+def assemble_by_speaker(talk_clip: Path, listen_clip: Path, cues: list[Cue] | None, total: float,
+                        out_path: Path) -> Path:
+    """말하는 클립/듣는 클립을 화자 구간대로 잘라 이어 붙인다 (역재생 없음).
+
+    같은 종류의 구간이 이어지면 클립 안에서 이어서 재생하고, 클립 끝에 닿으면 처음으로 돌아간다.
+    구간이 클립보다 짧으면(보통 대사 한 줄) 이음새가 생기지 않는다.
+    """
     out_path = Path(out_path)
-    run_ffmpeg(["-i", str(src), "-filter_complex",
-                "[0:v]split[a][b];[b]reverse[r];[a][r]concat=n=2:v=1:a=0,format=yuv420p[v]",
-                "-map", "[v]", "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", str(out_path)])
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    segs = speaker_segments(cues, total) or [(0.0, total, "listen")]
+    lengths = {"talk": probe_duration(talk_clip), "listen": probe_duration(listen_clip)}
+    idx = {"talk": 0, "listen": 1}
+    cursor = {"talk": 0.0, "listen": 0.0}
+    parts = []
+    for i, (s, e, kind) in enumerate(segs):
+        length = e - s
+        if cursor[kind] + length > lengths[kind]:
+            cursor[kind] = 0.0
+        off = cursor[kind]
+        parts.append(f"[{idx[kind]}:v]trim=start={off:.3f}:end={off + length:.3f},setpts=PTS-STARTPTS[s{i}]")
+        cursor[kind] = (off + length) % lengths[kind]
+    concat = "".join(f"[s{i}]" for i in range(len(segs))) + f"concat=n={len(segs)}:v=1:a=0,{_FIT_VF}[v]"
+    run_ffmpeg(["-stream_loop", "-1", "-i", str(talk_clip), "-stream_loop", "-1", "-i", str(listen_clip),
+                "-filter_complex", ";".join(parts + [concat]), "-map", "[v]", "-t", f"{total:.3f}",
+                "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", str(out_path)])
     return out_path
 
 
@@ -46,7 +83,6 @@ def puppet_zoom_expr(cues: list[Cue] | None, frames: int, fps: int = FPS) -> str
     if not talking:
         return base
     gate = "+".join(f"between(on/{fps},{c.start:g},{c.end:g})" for c in talking)
-    # 6.5Hz 정도의 작은 진동 + 약간의 상하 흔들림 → 자막과 동기화된 '말하는' 느낌
     return f"{base}+0.03*gt({gate},0)*abs(sin(on*1.35))"
 
 
@@ -72,23 +108,32 @@ class KenBurnsVideoProvider:
 
 
 class LocalClipProvider:
-    """사용자가 assets/clips 에 넣은 mp4 사용 (예: Kling 웹앱 무료 크레딧으로 만든 클립)."""
+    """사용자가 assets/clips 에 넣은 mp4 사용. 파일명에 'listen' 이 있으면 듣는 클립, 나머지는 말하는 클립."""
     name = "local"
 
-    def __init__(self, clip: Path):
-        self.clip = Path(clip)
+    def __init__(self, clips: list[Path] | Path):
+        clips = [Path(c) for c in ([clips] if isinstance(clips, (str, Path)) else clips)]
+        if not clips:
+            raise RuntimeError("assets/clips 에 mp4가 없습니다")
+        listen = [c for c in clips if "listen" in c.stem.lower()]
+        talk = [c for c in clips if c not in listen] or listen
+        self.talk, self.listen = talk[0], (listen[0] if listen else talk[0])
 
     def generate(self, image_path: Path, prompt: str, duration: float, out_path: Path,
                  cues: list[Cue] | None = None) -> Path:
-        pp = Path(out_path).with_name("clip_pingpong.mp4")
-        return loop_fit_clip(pingpong_clip(self.clip, pp), duration, out_path)
+        return assemble_by_speaker(self.talk, self.listen, cues, duration, out_path)
 
 
-MOTION_PROMPT = (
+TALK_PROMPT = (
     "The animal stays in place and talks into the microphone: mouth moving as if speaking, small head nods, "
     "ears twitching, blinking, subtle paw gestures; steady camera, gentle natural motion"
 )
-NEGATIVE_PROMPT = "worst quality, fast motion, spinning, camera shake, blurry, jittery, distorted, extra limbs, text, watermark"
+LISTEN_PROMPT = (
+    "The animal sits still and listens attentively to the interviewer, looking toward the microphone, "
+    "mouth closed, slow blinking, slight breathing, ears perked; steady camera, minimal motion"
+)
+NEGATIVE_PROMPT = ("worst quality, fast motion, spinning, camera shake, blurry, jittery, distorted, "
+                   "extra limbs, text, watermark")
 
 
 def ltx_model_path(settings: Settings) -> str:
@@ -109,7 +154,7 @@ def ltx_available() -> bool:
 class LocalAIVideoProvider:
     """로컬 GPU에서 오픈소스 LTX-Video(2B)로 image-to-video 생성 (무료, NVIDIA GPU 필요).
 
-    5초 남짓의 클립을 만들고 왕복(ping-pong) 반복으로 전체 길이를 채운다.
+    '말하는' 클립과 '듣는' 클립을 각각 만들고, 자막 타이밍대로 화자별 컷 편집한다.
     """
     name = "ltx"
 
@@ -128,7 +173,7 @@ class LocalAIVideoProvider:
             torch.backends.cuda.enable_cudnn_sdp(False)
             pipe = LTXConditionPipeline.from_pretrained(ltx_model_path(self.s), dtype=torch.bfloat16)
             # 기본 디스패치가 MATH 경로로 떨어지면 VRAM 초과 → Windows 가 시스템 RAM 으로 넘겨 극도로 느려진다.
-            # 메모리 효율 SDPA 를 명시하면 512x896x97 이 11.5GB, 스텝당 ~5초 (RTX 5060 Ti 16GB 기준).
+            # 메모리 효율 SDPA 를 명시하면 512x896x97 이 11.5GB, 스텝당 ~2초 (RTX 5060 Ti 16GB 기준).
             pipe.transformer.set_attention_backend(self.s.ltx_attention_backend)
             pipe.enable_model_cpu_offload()  # T5 텍스트 인코더와 트랜스포머를 번갈아 GPU 에 올림
             pipe.vae.enable_tiling()
@@ -136,35 +181,37 @@ class LocalAIVideoProvider:
             self._pipe = pipe
         return self._pipe
 
-    def generate(self, image_path: Path, prompt: str, duration: float, out_path: Path,
-                 cues: list[Cue] | None = None) -> Path:
+    def _clip(self, image, scene_prompt: str, motion_prompt: str, seed: int, out: Path) -> Path:
+        if out.exists():
+            return out
         import torch
         from diffusers.utils import export_to_video
+        pipe = self._pipeline()
+        frames = pipe(
+            prompt=f"{scene_prompt[:300]}. {motion_prompt}",  # T5 최대 128 토큰 안에 들어오도록 장면 프롬프트를 자른다
+            negative_prompt=NEGATIVE_PROMPT,
+            image=image,
+            width=self.s.ltx_width, height=self.s.ltx_height, num_frames=self.s.ltx_num_frames,
+            num_inference_steps=self.s.ltx_steps, guidance_scale=self.s.ltx_guidance,
+            decode_timestep=0.03, decode_noise_scale=0.025,
+            generator=torch.Generator(device="cuda").manual_seed(seed),
+        ).frames[0]
+        export_to_video(frames, str(out), fps=24)
+        return out
+
+    def generate(self, image_path: Path, prompt: str, duration: float, out_path: Path,
+                 cues: list[Cue] | None = None) -> Path:
         from PIL import Image
         out_path = Path(out_path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        pipe = self._pipeline()
-        width, height = self.s.ltx_width, self.s.ltx_height  # 32의 배수, 9:16
-        image = Image.open(image_path).convert("RGB").resize((width, height), Image.LANCZOS)
-        num_frames = self.s.ltx_num_frames  # 8k+1
-        generator = torch.Generator(device="cuda").manual_seed(self.s.ltx_seed)
-        frames = pipe(
-            prompt=f"{prompt[:300]}. {MOTION_PROMPT}",  # T5 최대 128 토큰 안에 들어오도록 장면 프롬프트를 자른다
-            negative_prompt=NEGATIVE_PROMPT,
-            image=image,
-            width=width, height=height, num_frames=num_frames,
-            num_inference_steps=self.s.ltx_steps, guidance_scale=self.s.ltx_guidance,
-            decode_timestep=0.03, decode_noise_scale=0.025,
-            generator=generator,
-        ).frames[0]
-        raw = out_path.with_name("ai_raw.mp4")
-        export_to_video(frames, str(raw), fps=24)
-        pp = out_path.with_name("ai_pingpong.mp4")
-        return loop_fit_clip(pingpong_clip(raw, pp), duration, out_path)
+        image = Image.open(image_path).convert("RGB").resize((self.s.ltx_width, self.s.ltx_height), Image.LANCZOS)
+        talk = self._clip(image, prompt, TALK_PROMPT, self.s.ltx_seed, out_path.with_name("ai_talk.mp4"))
+        listen = self._clip(image, prompt, LISTEN_PROMPT, self.s.ltx_seed + 1, out_path.with_name("ai_listen.mp4"))
+        return assemble_by_speaker(talk, listen, cues, duration, out_path)
 
 
 class KlingVideoProvider:
-    """Kling 3.0 image-to-video API (유료, ALLOW_PAID 필요)."""
+    """Kling 3.0 image-to-video API (유료, ALLOW_PAID 필요). 클립 하나를 앞으로 반복한다."""
     name = "kling"
 
     def __init__(self, settings: Settings, session=None, sleep=time.sleep):
@@ -184,7 +231,7 @@ class KlingVideoProvider:
                  cues: list[Cue] | None = None) -> Path:
         secs = int(min(15, max(3, math.ceil(duration))))
         ext_id = uuid.uuid4().hex
-        body = {"contents": [{"type": "prompt", "text": f"{prompt}. {MOTION_PROMPT}"[:2500]},
+        body = {"contents": [{"type": "prompt", "text": f"{prompt}. {TALK_PROMPT}"[:2500]},
                              {"type": "first_frame", "url": base64.b64encode(Path(image_path).read_bytes()).decode()}],
                 "settings": {"resolution": "1080p", "duration": secs, "audio": "off", "multi_shot": False},
                 "options": {"external_task_id": ext_id, "watermark_info": {"enabled": False}}}

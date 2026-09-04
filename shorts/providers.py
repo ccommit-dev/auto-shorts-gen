@@ -21,10 +21,14 @@ class Providers:
     video: VideoProvider
 
 
-def _first_file(folder: Path, exts: tuple[str, ...]) -> Path | None:
+def _files(folder: Path, exts: tuple[str, ...]) -> list[Path]:
     if not folder.exists():
-        return None
-    files = sorted(p for p in folder.iterdir() if p.suffix.lower() in exts)
+        return []
+    return sorted(p for p in folder.iterdir() if p.suffix.lower() in exts)
+
+
+def _first_file(folder: Path, exts: tuple[str, ...]) -> Path | None:
+    files = _files(folder, exts)
     return files[0] if files else None
 
 
@@ -60,14 +64,12 @@ def build_providers(settings: Settings, *, dry_run: bool, video_provider: str | 
     tp = tts_provider or "edge"
     tts = ElevenLabsTTSProvider(settings) if tp == "elevenlabs" else EdgeTTSProvider(settings)
 
-    local_clip = _first_file(assets / "clips", (".mp4", ".mov"))
+    local_clips = _files(assets / "clips", (".mp4", ".mov"))
     vp = video_provider or settings.video_provider
     if vp == "auto":
-        vp = "local" if local_clip else ("ltx" if ltx_available() else "kenburns")
+        vp = "local" if local_clips else ("ltx" if ltx_available() else "kenburns")
     if vp == "local":
-        if not local_clip:
-            raise RuntimeError("assets/clips 에 mp4가 없습니다")
-        video = LocalClipProvider(local_clip)
+        video = LocalClipProvider(local_clips)
     elif vp == "kling":
         video = KlingVideoProvider(settings)
     elif vp == "ltx":
