@@ -22,6 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--video-provider", choices=["auto", "kenburns", "local", "ltx", "kling"],
                    help="기본 auto: assets/clips 에 mp4가 있으면 local, NVIDIA GPU가 있으면 ltx(로컬 AI), 아니면 kenburns")
     p.add_argument("--resume", help="기존 실행 폴더를 이어서 실행")
+    p.add_argument("--redo", default="", help="--resume 시 다시 할 단계: image,motion,overlays,compose (쉼표 구분)")
     p.add_argument("--check", action="store_true", help="환경/키/쿼터 점검만 하고 종료")
     p.add_argument("--no-dotenv", action="store_true", help=".env 를 읽지 않음(테스트용)")
     return p
@@ -83,6 +84,12 @@ def main(argv: list[str] | None = None) -> int:
                                     image_provider=args.image_provider, script_provider=args.script_provider,
                                     tts_provider=args.tts_provider, ledger=ledger)
         if args.resume:
+            if args.redo:
+                from shorts.pipeline import Manifest, RunPaths
+                m = Manifest.load(RunPaths(Path(args.resume)).manifest_json)
+                for step in (x.strip() for x in args.redo.split(",") if x.strip()):
+                    m.data["steps"].pop(step, None)
+                m.save()
             run_pipeline(settings, providers, args.topic or "", run_dir=Path(args.resume), publish=publish)
             return 0
         for i in range(args.count):

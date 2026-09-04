@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Protocol
 
@@ -8,6 +9,7 @@ from .config import Settings
 from .cost_guard import ensure_allowed
 from .ffmpeg_tools import make_silence, probe_duration
 from .script_model import Script
+from .timing import even_words
 
 
 @dataclass
@@ -17,6 +19,29 @@ class Utterance:
     text: str
     path: Path
     duration: float
+    words: list[tuple[float, float, str]] = field(default_factory=list)  # mp3 기준 상대 시각
+
+
+def words_path(mp3: Path) -> Path:
+    return Path(mp3).with_suffix(".words.jsonl")
+
+
+def load_words(mp3: Path, text: str, duration: float) -> list[tuple[float, float, str]]:
+    """edge-tts WordBoundary 메타(100ns 단위)를 읽고, 없거나 비어 있으면 균등 분배."""
+    p = words_path(mp3)
+    out: list[tuple[float, float, str]] = []
+    if p.exists():
+        for line in p.read_text("utf-8").splitlines():
+            try:
+                d = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if d.get("type") != "WordBoundary":
+                continue
+            start = d["offset"] / 1e7
+            end = min(duration, (d["offset"] + d.get("duration", 0)) / 1e7)
+            out.append((round(start, 3), round(max(end, start + 0.05), 3), str(d.get("text", "")).strip()))
+    return out or even_words(text, duration)
 
 
 class TTSProvider(Protocol):
@@ -24,7 +49,7 @@ class TTSProvider(Protocol):
 
 
 class EdgeTTSProvider:
-    """Microsoft Edge 신경망 음성 (무료)."""
+    """Microsoft Edge 신경망 음성 (무료). 단어 타이밍을 <mp3>.words.jsonl 에 함께 저장한다."""
     name = "edge-tts"
 
     def __init__(self, settings: Settings):
@@ -38,7 +63,8 @@ class EdgeTTSProvider:
         rate = "+8%" if speaker == "animal" else "+0%"
         pitch = "+20Hz" if speaker == "animal" else "+0Hz"
         voice = self.voices.get(speaker, self.voices["animal"])
-        edge_tts.Communicate(text, voice, rate=rate, pitch=pitch).save_sync(str(out_path))
+        comm = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch, boundary="WordBoundary")
+        comm.save_sync(str(out_path), str(words_path(out_path)))
         return out_path
 
 
@@ -84,5 +110,6 @@ def synthesize_lines(script: Script, provider: TTSProvider, path_for: Callable[[
         p = Path(path_for(i))
         if not p.exists():
             provider.synthesize(line.text, line.speaker, p)
-        out.append(Utterance(i, line.speaker, line.text, p, probe_duration(p)))
+        dur = probe_duration(p)
+        out.append(Utterance(i, line.speaker, line.text, p, dur, load_words(p, line.text, dur)))
     return out

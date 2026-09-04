@@ -70,3 +70,44 @@ def render_title(title: str, out_path: Path, font_path: str | None) -> Path:
 def render_subtitle(text: str, out_path: Path, font_path: str | None) -> Path:
     return render_text_png(text, out_path, font_path=font_path, font_size=68, fill=(255, 255, 255, 255),
                            stroke_fill=(0, 0, 0, 255), stroke_width=8, canvas=(1080, 300), max_width=960)
+
+
+PUNCH_FILL = (255, 222, 0, 255)
+
+
+def render_subtitle_words(words: list[str], visible: int, out_path: Path, font_path: str | None,
+                          punch: bool = False) -> Path:
+    """전체 줄의 배치는 고정한 채 앞에서 visible 개 어절만 그린다 (단어가 하나씩 튀어나오는 자막).
+
+    punch=True 면 펀치라인 스타일(노란색, 더 큰 글씨).
+    """
+    font_size = 78 if punch else 68
+    fill = PUNCH_FILL if punch else (255, 255, 255, 255)
+    canvas, max_width, stroke = (1080, 300), 960, 8
+    img = Image.new("RGBA", canvas, (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    font = _font(font_path, font_size)
+    # 어절 단위로 줄바꿈: 폭을 넘기면 다음 줄
+    lines: list[list[str]] = [[]]
+    for w in words:
+        trial = " ".join(lines[-1] + [w])
+        if lines[-1] and d.textlength(trial, font=font) > max_width:
+            lines.append([w])
+        else:
+            lines[-1].append(w)
+    line_h = font_size + 12
+    y = (canvas[1] - line_h * len(lines)) // 2
+    shown = 0
+    space = d.textlength(" ", font=font)
+    for ln in lines:
+        x = (canvas[0] - d.textlength(" ".join(ln), font=font)) / 2
+        for w in ln:
+            if shown < visible:
+                d.text((x, y), w, font=font, fill=fill, stroke_width=stroke, stroke_fill=(0, 0, 0, 255))
+            shown += 1
+            x += d.textlength(w, font=font) + space
+        y += line_h
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    img.save(out_path, "PNG")
+    return out_path

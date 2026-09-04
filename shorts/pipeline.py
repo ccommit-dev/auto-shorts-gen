@@ -6,9 +6,9 @@ import traceback
 from dataclasses import dataclass
 from pathlib import Path
 
-from .compose import compose
+from .compose import Overlay, compose
 from .config import Settings
-from .overlay import render_subtitle, render_title, resolve_font
+from .overlay import render_subtitle_words, render_title, resolve_font
 from .providers import Providers
 from .script_model import Script, slugify
 from .timing import build_cues, total_duration
@@ -35,7 +35,7 @@ class RunPaths:
     def manifest_json(self) -> Path: return self.run_dir / "manifest.json"
 
     def line_mp3(self, i: int) -> Path: return self.run_dir / f"line_{i:02d}.mp3"
-    def subtitle_png(self, i: int) -> Path: return self.run_dir / f"sub_{i:02d}.png"
+    def subtitle_png(self, i: int, k: int = 0) -> Path: return self.run_dir / f"sub_{i:02d}_{k:02d}.png"
 
 
 class Manifest:
@@ -84,6 +84,22 @@ def write_meta(script: Script, path: Path) -> None:
     path.write_text(text, "utf-8")
 
 
+def plan_subtitle_overlays(cues: list, paths: RunPaths) -> list[list[Overlay]]:
+    """줄마다 어절이 하나씩 드러나는 오버레이 목록. k번째 PNG 는 k개 어절이 보이며 k번째 어절 시작~다음 어절 시작 동안 표시."""
+    plan: list[list[Overlay]] = []
+    for i, cue in enumerate(cues):
+        words = cue.words or []
+        if not words:
+            plan.append([Overlay(paths.subtitle_png(i, 1), cue.start, cue.end)])
+            continue
+        group = []
+        for k, w in enumerate(words, start=1):
+            end = words[k].start if k < len(words) else cue.end
+            group.append(Overlay(paths.subtitle_png(i, k), w.start, max(end, w.start + 0.05)))
+        plan.append(group)
+    return plan
+
+
 def _step(manifest: Manifest, name: str, fn) -> None:
     if manifest.done(name):
         print(f"  [skip] {name}")
@@ -124,7 +140,8 @@ def run_pipeline(settings: Settings, providers: Providers, topic: str, *, run_di
 
     utts = synthesize_lines(script, providers.tts, paths.line_mp3)
     manifest.mark("tts", "done", lines=len(utts))
-    cues = build_cues([u.duration for u in utts], [u.text for u in utts], [u.speaker for u in utts])
+    cues = build_cues([u.duration for u in utts], [u.text for u in utts], [u.speaker for u in utts],
+                      words=[u.words for u in utts])
     total = total_duration(cues)
 
     _step(manifest, "motion",
@@ -132,16 +149,21 @@ def run_pipeline(settings: Settings, providers: Providers, topic: str, *, run_di
 
     font = resolve_font(settings.font_path)
 
+    overlays = plan_subtitle_overlays(cues, paths)
+
     def _overlays() -> None:
         render_title(script.title, paths.title_png, font)
-        for i, cue in enumerate(cues):
-            render_subtitle(cue.text, paths.subtitle_png(i), font)
+        for cue, group in zip(cues, overlays):
+            words = [w.text for w in cue.words] or [cue.text]
+            for k, ov in enumerate(group, start=1):
+                render_subtitle_words(words, k, ov.png, font, punch=cue.punch)
 
     _step(manifest, "overlays", _overlays)
+    punch = next(((c.start, total) for c in cues if c.punch), None)
     _step(manifest, "compose", lambda: compose(
         video=paths.motion_mp4, title_png=paths.title_png,
-        subtitle_pngs=[paths.subtitle_png(i) for i in range(len(cues))],
-        cues=cues, utterances=utts, bgm=find_bgm(settings.assets_dir), total=total, out_path=paths.final_mp4))
+        overlays=[ov for group in overlays for ov in group], cues=cues, utterances=utts,
+        bgm=find_bgm(settings.assets_dir), total=total, out_path=paths.final_mp4, punch=punch))
 
     write_meta(script, paths.meta_txt)
     manifest.mark("meta", "done", duration=total)

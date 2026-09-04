@@ -15,3 +15,17 @@ def test_title_and_subtitle_pngs_are_transparent_full_width(tmp_path):
 def test_resolve_font_prefers_existing_windows_font():
     f = resolve_font("C:/definitely/missing.ttf")
     assert f is None or f.lower().endswith(".ttf")
+
+
+def test_word_overlays_reveal_progressively(tmp_path):
+    from shorts.overlay import render_subtitle_words
+    f = resolve_font(None)
+    words = ["못생긴", "언니", "오백원"]
+    sizes = []
+    for k in (1, 2, 3):
+        p = render_subtitle_words(words, k, tmp_path / f"w{k}.png", f, punch=True)
+        im = Image.open(p)
+        assert im.mode == "RGBA" and im.width == 1080
+        bbox = im.getbbox()
+        sizes.append(bbox[2] - bbox[0])
+    assert sizes[0] < sizes[1] < sizes[2]  # 어절이 늘수록 그려진 폭이 커진다
