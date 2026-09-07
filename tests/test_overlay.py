@@ -29,3 +29,11 @@ def test_word_overlays_reveal_progressively(tmp_path):
         bbox = im.getbbox()
         sizes.append(bbox[2] - bbox[0])
     assert sizes[0] < sizes[1] < sizes[2]  # 어절이 늘수록 그려진 폭이 커진다
+
+
+def test_title_popin_frames_scale_up(tmp_path):
+    from shorts.overlay import render_title_popin
+    t = render_title("장사 잘하는법", tmp_path / "t.png", resolve_font(None))
+    frames = render_title_popin(t, tmp_path)
+    widths = [Image.open(p).width for p in frames]
+    assert len(frames) == 3 and widths[0] < widths[1] < widths[2] and widths[2] > 1080

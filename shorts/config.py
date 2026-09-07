@@ -46,11 +46,14 @@ class Settings:
     models_dir: str = "models"  # 다운로드한 모델 폴더 (HF 캐시의 심볼릭 링크 문제 회피)
     ltx_width: int = 512
     ltx_height: int = 896
-    ltx_num_frames: int = 97
-    ltx_steps: int = 30
-    ltx_guidance: float = 3.0
+    ltx_num_frames: int = 161
+    ltx_steps: int = 40
+    ltx_guidance: float = 4.0
     ltx_seed: int = 42
     ltx_attention_backend: str = "_native_efficient"  # diffusers attention backend 이름
+    ltx_seeds: int = 2            # 시드 몇 개를 만들어 움직임이 적당한 클립을 고를지
+    ltx_interpolate: bool = True  # 24fps → 30fps minterpolate 보간
+    ltx_closeup: bool = True      # 펀치라인용 클로즈업 클립 추가 생성
     # 렌더링/출력
     font_path: str = "C:/Windows/Fonts/malgunbd.ttf"
     output_dir: str = "output"
@@ -98,6 +101,9 @@ class Settings:
             ltx_guidance=float(g("LTX_GUIDANCE") or cls.ltx_guidance),
             ltx_seed=_int(g("LTX_SEED"), cls.ltx_seed),
             ltx_attention_backend=g("LTX_ATTENTION_BACKEND") or cls.ltx_attention_backend,
+            ltx_seeds=_int(g("LTX_SEEDS"), cls.ltx_seeds),
+            ltx_interpolate=_bool(g("LTX_INTERPOLATE"), cls.ltx_interpolate),
+            ltx_closeup=_bool(g("LTX_CLOSEUP"), cls.ltx_closeup),
             font_path=g("FONT_PATH") or cls.font_path,
             output_dir=g("OUTPUT_DIR") or cls.output_dir,
             assets_dir=g("ASSETS_DIR") or cls.assets_dir,

@@ -111,3 +111,14 @@ def render_subtitle_words(words: list[str], visible: int, out_path: Path, font_p
     out_path.parent.mkdir(parents=True, exist_ok=True)
     img.save(out_path, "PNG")
     return out_path
+
+
+def render_title_popin(title_png: Path, out_dir: Path, scales=(0.55, 0.85, 1.1)) -> list[Path]:
+    """제목 PNG 를 여러 배율로 저장해 팝인 애니메이션 프레임을 만든다 (작게 → 살짝 크게 → 원래 크기)."""
+    base = Image.open(title_png).convert("RGBA")
+    out = []
+    for i, sc in enumerate(scales):
+        p = Path(out_dir) / f"title_pop_{i:02d}.png"
+        base.resize((max(1, int(base.width * sc)), max(1, int(base.height * sc))), Image.LANCZOS).save(p, "PNG")
+        out.append(p)
+    return out

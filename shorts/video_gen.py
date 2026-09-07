@@ -32,8 +32,9 @@ def loop_fit_clip(src: Path, duration: float, out_path: Path) -> Path:
     return out_path
 
 
-def speaker_segments(cues: list[Cue] | None, total: float) -> list[tuple[float, float, str]]:
-    """타임라인을 (start, end, 'talk'|'listen') 구간으로 나눈다. 동물 대사만 talk, 나머지(기자·간격)는 listen."""
+def speaker_segments(cues: list[Cue] | None, total: float, punch_kind: str = "talk") -> list[tuple[float, float, str]]:
+    """타임라인을 (start, end, kind) 구간으로 나눈다. 동물 대사는 talk(펀치라인은 punch_kind), 나머지는 listen.
+    펀치라인 이후 꼬리(tail)는 펀치라인 구간에 붙여 마지막 컷이 유지되게 한다."""
     segs: list[tuple[float, float, str]] = []
     t = 0.0
     for c in sorted(cues or [], key=lambda c: c.start):
@@ -41,8 +42,9 @@ def speaker_segments(cues: list[Cue] | None, total: float) -> list[tuple[float, 
             continue
         if c.start > t:
             segs.append((t, c.start, "listen"))
-        segs.append((max(t, c.start), c.end, "talk"))
-        t = c.end
+        end = total if c.punch else c.end
+        segs.append((max(t, c.start), end, punch_kind if c.punch else "talk"))
+        t = end
     if t < total:
         segs.append((t, total, "listen"))
     return [(round(s, 3), round(e, 3), k) for s, e, k in segs if e - s > 0.01]
@@ -67,7 +69,7 @@ def merge_short_segments(segs: list[tuple[float, float, str]], min_len: float = 
 
 
 def assemble_by_speaker(talk_clip: Path, listen_clip: Path, cues: list[Cue] | None, total: float,
-                        out_path: Path) -> Path:
+                        out_path: Path, punch_clip: Path | None = None) -> Path:
     """말하는 클립/듣는 클립을 화자 구간대로 잘라 이어 붙인다 (역재생 없음).
 
     두 클립은 같은 장면 이미지에서 시작하므로 구간마다 0초부터 재생하면 컷의 첫 프레임이 같아 이음새가
@@ -76,8 +78,12 @@ def assemble_by_speaker(talk_clip: Path, listen_clip: Path, cues: list[Cue] | No
     """
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    segs = merge_short_segments(speaker_segments(cues, total) or [(0.0, total, "listen")])
-    idx = {"talk": 0, "listen": 1}
+    clips = {"talk": Path(talk_clip), "listen": Path(listen_clip)}
+    if punch_clip is not None:
+        clips["punch"] = Path(punch_clip)
+    segs = merge_short_segments(speaker_segments(cues, total, "punch" if punch_clip else "talk")
+                                or [(0.0, total, "listen")])
+    idx = {k: i for i, k in enumerate(clips)}
     n = len(segs)
     parts, lengths = [], []
     for i, (s, e, kind) in enumerate(segs):
@@ -95,10 +101,50 @@ def assemble_by_speaker(talk_clip: Path, listen_clip: Path, cues: list[Cue] | No
             steps.append(f"[{cur}][s{i}]xfade=transition=fade:duration={XFADE}:offset={offset:.3f}[{nxt}]")
             cur = nxt
         chain = ";".join(steps)
-    run_ffmpeg(["-stream_loop", "-1", "-i", str(talk_clip), "-stream_loop", "-1", "-i", str(listen_clip),
-                "-filter_complex", ";".join(parts + [chain]), "-map", "[v]", "-t", f"{total:.3f}",
+    inputs = []
+    for c in clips.values():
+        inputs += ["-stream_loop", "-1", "-i", str(c)]
+    run_ffmpeg([*inputs, "-filter_complex", ";".join(parts + [chain]), "-map", "[v]", "-t", f"{total:.3f}",
                 "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", str(out_path)])
     return out_path
+
+
+def motion_score(path: Path, w: int = 96, h: int = 160) -> float:
+    """연속 프레임 평균 절대차(0~255). 정지 0.5 이하, 자연스러운 말하기 2~4, 과한 움직임 8+."""
+    import subprocess
+    import numpy as np
+    from .ffmpeg_tools import ffmpeg_exe
+    raw = subprocess.run([ffmpeg_exe(), "-hide_banner", "-loglevel", "error", "-i", str(path),
+                          "-vf", f"scale={w}:{h},format=gray", "-f", "rawvideo", "-"], capture_output=True).stdout
+    frames = np.frombuffer(raw, np.uint8).reshape(-1, h, w).astype(np.float32)
+    if len(frames) < 2:
+        return 0.0
+    return float(np.abs(np.diff(frames, axis=0)).mean())
+
+
+MOTION_TARGET = {"talk": 2.5, "listen": 1.0, "punch": 3.0}
+
+
+def pick_by_motion(candidates: list[Path], kind: str, target: float | None = None) -> Path:
+    """움직임 점수가 목표에 가장 가까운 클립을 고른다."""
+    if target is None:
+        target = MOTION_TARGET.get(kind, 2.0)
+    return min(candidates, key=lambda p: abs(motion_score(p) - target))
+
+
+def interpolate_30fps(src: Path, out_path: Path) -> Path:
+    """24fps 클립을 minterpolate 로 30fps 보간 (원본 해상도에서 수행해 빠르게)."""
+    run_ffmpeg(["-i", str(src), "-vf", f"minterpolate=fps={FPS}:mi_mode=mci:mc_mode=aobmc:vsbmc=1",
+                "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", str(out_path)])
+    return out_path
+
+
+def closeup_crop(image, frac: float = 0.62, top: float = 0.06):
+    """장면 이미지의 위쪽 중앙(얼굴 근처)을 같은 비율로 크롭한 클로즈업."""
+    w, h = image.size
+    cw, ch = int(w * frac), int(h * frac)
+    x, y = (w - cw) // 2, int(h * top)
+    return image.crop((x, y, x + cw, y + ch)).resize((w, h))
 
 
 def puppet_zoom_expr(cues: list[Cue] | None, frames: int, fps: int = FPS) -> str:
@@ -224,15 +270,34 @@ class LocalAIVideoProvider:
         export_to_video(frames, str(out), fps=24)
         return out
 
+    def _best_clip(self, image, prompt: str, motion_prompt: str, kind: str, base_seed: int, out_dir: Path) -> Path:
+        """시드 ltx_seeds 개를 생성해 움직임이 목표에 가까운 것을 고르고, 필요하면 30fps 로 보간한다."""
+        final = out_dir / f"ai_{kind}.mp4"
+        if final.exists():
+            return final
+        cands = [self._clip(image, prompt, motion_prompt, base_seed + 10 * k, out_dir / f"ai_{kind}_s{k}.mp4")
+                 for k in range(max(1, self.s.ltx_seeds))]
+        best = pick_by_motion(cands, kind) if len(cands) > 1 else cands[0]
+        if self.s.ltx_interpolate:
+            return interpolate_30fps(best, final)
+        import shutil
+        shutil.copyfile(best, final)
+        return final
+
     def generate(self, image_path: Path, prompt: str, duration: float, out_path: Path,
                  cues: list[Cue] | None = None) -> Path:
         from PIL import Image
         out_path = Path(out_path)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_dir = out_path.parent
+        out_dir.mkdir(parents=True, exist_ok=True)
         image = Image.open(image_path).convert("RGB").resize((self.s.ltx_width, self.s.ltx_height), Image.LANCZOS)
-        talk = self._clip(image, prompt, TALK_PROMPT, self.s.ltx_seed, out_path.with_name("ai_talk.mp4"))
-        listen = self._clip(image, prompt, LISTEN_PROMPT, self.s.ltx_seed + 1, out_path.with_name("ai_listen.mp4"))
-        return assemble_by_speaker(talk, listen, cues, duration, out_path)
+        seed = self.s.ltx_seed
+        talk = self._best_clip(image, prompt, TALK_PROMPT, "talk", seed, out_dir)
+        listen = self._best_clip(image, prompt, LISTEN_PROMPT, "listen", seed + 1, out_dir)
+        punch = None
+        if self.s.ltx_closeup and any(c.punch for c in (cues or [])):
+            punch = self._best_clip(closeup_crop(image), prompt, TALK_PROMPT, "punch", seed + 2, out_dir)
+        return assemble_by_speaker(talk, listen, cues, duration, out_path, punch_clip=punch)
 
 
 class KlingVideoProvider:

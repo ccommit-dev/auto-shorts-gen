@@ -10,7 +10,7 @@ from .audio_assets import ensure_audio_assets
 from .compose import Overlay, Sfx, compose
 from .video_gen import merge_short_segments, speaker_segments
 from .config import Settings
-from .overlay import render_subtitle_words, render_title, resolve_font
+from .overlay import render_subtitle_words, render_title, render_title_popin, resolve_font
 from .providers import Providers
 from .script_model import Script, slugify
 from .timing import build_cues, total_duration
@@ -155,6 +155,7 @@ def run_pipeline(settings: Settings, providers: Providers, topic: str, *, run_di
 
     def _overlays() -> None:
         render_title(script.title, paths.title_png, font)
+        render_title_popin(paths.title_png, paths.run_dir)
         for cue, group in zip(cues, overlays):
             words = [w.text for w in cue.words] or [cue.text]
             for k, ov in enumerate(group, start=1):
@@ -167,10 +168,13 @@ def run_pipeline(settings: Settings, providers: Providers, topic: str, *, run_di
     sfx = [Sfx(audio["pop"], t) for t in cuts]
     if punch:
         sfx.append(Sfx(audio["ding"], max(0.0, punch[0] - 0.15)))
+    pop_frames = sorted(paths.run_dir.glob("title_pop_*.png"))
+    title_frames = [Overlay(p, round(i * 0.08, 3), round((i + 1) * 0.08, 3)) for i, p in enumerate(pop_frames)]
     _step(manifest, "compose", lambda: compose(
         video=paths.motion_mp4, title_png=paths.title_png,
         overlays=[ov for group in overlays for ov in group], cues=cues, utterances=utts,
-        bgm=audio["bgm"], total=total, out_path=paths.final_mp4, punch=punch, sfx=sfx))
+        bgm=audio["bgm"], total=total, out_path=paths.final_mp4, punch=punch, sfx=sfx,
+        title_frames=title_frames))
 
     write_meta(script, paths.meta_txt)
     manifest.mark("meta", "done", duration=total)

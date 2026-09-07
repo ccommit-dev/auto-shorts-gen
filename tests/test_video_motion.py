@@ -82,3 +82,40 @@ def test_assemble_restarts_clips_and_crossfades(tmp_path):
     run_ffmpeg(["-ss", "1.275", "-i", str(out), "-frames:v", "1", str(png)])
     r, g, b = Image.open(png).convert("RGB").getpixel((540, 960))
     assert r > 60 and b > 60
+
+
+def test_motion_score_and_pick(tmp_path):
+    from shorts.video_gen import motion_score, pick_by_motion
+    still = _clip(tmp_path / "still.mp4", "red", 1)
+    moving = tmp_path / "moving.mp4"
+    run_ffmpeg(["-f", "lavfi", "-i", "testsrc=size=320x576:rate=24:duration=1", "-c:v", "libx264",
+                "-pix_fmt", "yuv420p", str(moving)])
+    assert motion_score(still) < 0.2 < motion_score(moving)
+    assert pick_by_motion([still, moving], "listen", target=0.0) == still
+    assert pick_by_motion([still, moving], "talk", target=100.0) == moving
+
+
+def test_punch_segment_uses_punch_clip_and_absorbs_tail(tmp_path):
+    from shorts.video_gen import speaker_segments
+    cues = [Cue(0.5, 1.0, "q", "reporter"), Cue(1.2, 2.0, "a", "animal"), Cue(2.5, 3.0, "b", "animal", punch=True)]
+    segs = speaker_segments(cues, 3.6, "punch")
+    assert segs[-1] == (2.5, 3.6, "punch") and segs[-2] == (2.0, 2.5, "listen")
+    talk = _clip(tmp_path / "t.mp4", "red", 2)
+    listen = _clip(tmp_path / "l.mp4", "blue", 2)
+    punch = _clip(tmp_path / "p.mp4", "green", 2)
+    out = assemble_by_speaker(talk, listen, cues, 3.6, tmp_path / "m.mp4", punch_clip=punch)
+    png = tmp_path / "end.png"
+    run_ffmpeg(["-ss", "3.3", "-i", str(out), "-frames:v", "1", str(png)])
+    r, g, b = Image.open(png).convert("RGB").getpixel((540, 960))
+    assert g > r and g > b
+
+
+def test_interpolate_and_closeup(tmp_path):
+    from shorts.video_gen import interpolate_30fps, closeup_crop
+    src = tmp_path / "src.mp4"
+    run_ffmpeg(["-f", "lavfi", "-i", "testsrc=size=160x288:rate=24:duration=1", "-c:v", "libx264",
+                "-pix_fmt", "yuv420p", str(src)])
+    out = interpolate_30fps(src, tmp_path / "i.mp4")
+    assert abs(probe_duration(out) - 1.0) < 0.15
+    img = Image.new("RGB", (512, 896), "white")
+    assert closeup_crop(img).size == (512, 896)
