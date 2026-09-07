@@ -45,7 +45,17 @@ def load_words(mp3: Path, text: str, duration: float) -> list[tuple[float, float
 
 
 class TTSProvider(Protocol):
-    def synthesize(self, text: str, speaker: str, out_path: Path) -> Path: ...
+    def synthesize(self, text: str, speaker: str, out_path: Path, index: int = 0) -> Path: ...
+
+
+ANIMAL_VARIATIONS = [("+8%", "+20Hz"), ("+4%", "+16Hz"), ("+12%", "+24Hz"), ("+6%", "+22Hz")]
+REPORTER_VARIATIONS = [("+0%", "+0Hz"), ("+3%", "+2Hz"), ("-2%", "-2Hz")]
+
+
+def voice_variation(speaker: str, index: int) -> tuple[str, str]:
+    """줄마다 rate/pitch 를 조금씩 바꿔 같은 톤이 반복되는 TTS 티를 줄인다."""
+    table = ANIMAL_VARIATIONS if speaker == "animal" else REPORTER_VARIATIONS
+    return table[index % len(table)]
 
 
 class EdgeTTSProvider:
@@ -56,12 +66,11 @@ class EdgeTTSProvider:
         ensure_allowed(self.name, settings.allow_paid)
         self.voices = {"animal": settings.tts_voice_animal, "reporter": settings.tts_voice_reporter}
 
-    def synthesize(self, text: str, speaker: str, out_path: Path) -> Path:
+    def synthesize(self, text: str, speaker: str, out_path: Path, index: int = 0) -> Path:
         import edge_tts
         out_path = Path(out_path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        rate = "+8%" if speaker == "animal" else "+0%"
-        pitch = "+20Hz" if speaker == "animal" else "+0Hz"
+        rate, pitch = voice_variation(speaker, index)
         voice = self.voices.get(speaker, self.voices["animal"])
         comm = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch, boundary="WordBoundary")
         comm.save_sync(str(out_path), str(words_path(out_path)))
@@ -83,7 +92,7 @@ class ElevenLabsTTSProvider:
         self.session = session
         self.voices = {"animal": settings.elevenlabs_voice_animal, "reporter": settings.elevenlabs_voice_reporter}
 
-    def synthesize(self, text: str, speaker: str, out_path: Path) -> Path:
+    def synthesize(self, text: str, speaker: str, out_path: Path, index: int = 0) -> Path:
         vid = self.voices.get(speaker, self.voices["animal"])
         r = self.session.post(f"https://api.elevenlabs.io/v1/text-to-speech/{vid}",
                               headers={"xi-api-key": self.s.elevenlabs_api_key, "accept": "audio/mpeg"},
@@ -100,7 +109,7 @@ class SilentTTSProvider:
     """dry-run용: 글자 수에 비례한 무음."""
     name = "placeholder"
 
-    def synthesize(self, text: str, speaker: str, out_path: Path) -> Path:
+    def synthesize(self, text: str, speaker: str, out_path: Path, index: int = 0) -> Path:
         return make_silence(out_path, 0.5 + 0.12 * len(text))
 
 
@@ -109,7 +118,7 @@ def synthesize_lines(script: Script, provider: TTSProvider, path_for: Callable[[
     for i, line in enumerate(script.lines):
         p = Path(path_for(i))
         if not p.exists():
-            provider.synthesize(line.text, line.speaker, p)
+            provider.synthesize(line.text, line.speaker, p, index=i)
         dur = probe_duration(p)
         out.append(Utterance(i, line.speaker, line.text, p, dur, load_words(p, line.text, dur)))
     return out

@@ -29,3 +29,16 @@ def test_punch_zoom_and_bgm():
     fc = cmd[cmd.index("-filter_complex") + 1]
     assert "scale=1166:2074,crop=1080:1920[vz]" in fc and "between(t,1.85,4.45)" in fc
     assert "-stream_loop" in cmd and "volume=0.12" in fc and "amix=inputs=3" in fc
+
+
+def test_sfx_reverb_loudnorm_freeze_and_title_popin():
+    from shorts.compose import Sfx
+    cmd = _base(sfx=[Sfx(Path("pop.wav"), 1.85), Sfx(Path("ding.wav"), 3.0)],
+                title_frames=[Overlay(Path("t0.png"), 0.0, 0.1), Overlay(Path("t1.png"), 0.1, 0.2)],
+                end_freeze=0.5)
+    fc = cmd[cmd.index("-filter_complex") + 1]
+    assert "aecho=" in fc and "loudnorm=" in fc
+    assert "adelay=1850|1850[sfx0]" in fc and "adelay=3000|3000[sfx1]" in fc
+    assert "tpad=stop_mode=clone:stop_duration=0.500" in fc and "trim=0:3.950" in fc
+    assert "between(t,0,0.1)" in fc and "gte(t,0.2)" in fc
+    assert "amix=inputs=4" in fc

@@ -8,3 +8,5 @@ client_secrets.json
 .pytest_cache/
 .idea/
 models/
+assets/sfx/
+assets/bgm/default_bgm.mp3

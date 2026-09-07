@@ -6,7 +6,9 @@ import traceback
 from dataclasses import dataclass
 from pathlib import Path
 
-from .compose import Overlay, compose
+from .audio_assets import ensure_audio_assets
+from .compose import Overlay, Sfx, compose
+from .video_gen import merge_short_segments, speaker_segments
 from .config import Settings
 from .overlay import render_subtitle_words, render_title, resolve_font
 from .providers import Providers
@@ -160,10 +162,15 @@ def run_pipeline(settings: Settings, providers: Providers, topic: str, *, run_di
 
     _step(manifest, "overlays", _overlays)
     punch = next(((c.start, total) for c in cues if c.punch), None)
+    audio = ensure_audio_assets(settings.assets_dir)
+    cuts = [s for s, _, _ in merge_short_segments(speaker_segments(cues, total))][1:]
+    sfx = [Sfx(audio["pop"], t) for t in cuts]
+    if punch:
+        sfx.append(Sfx(audio["ding"], max(0.0, punch[0] - 0.15)))
     _step(manifest, "compose", lambda: compose(
         video=paths.motion_mp4, title_png=paths.title_png,
         overlays=[ov for group in overlays for ov in group], cues=cues, utterances=utts,
-        bgm=find_bgm(settings.assets_dir), total=total, out_path=paths.final_mp4, punch=punch))
+        bgm=audio["bgm"], total=total, out_path=paths.final_mp4, punch=punch, sfx=sfx))
 
     write_meta(script, paths.meta_txt)
     manifest.mark("meta", "done", duration=total)

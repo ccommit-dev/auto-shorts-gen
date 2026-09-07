@@ -29,7 +29,7 @@ class Settings:
     image_style_suffix: str = ("mouth closed, looking at the camera, centered, full body visible, "
                                "photorealistic, sharp focus, vertical 9:16")
     tts_voice_animal: str = "ko-KR-SunHiNeural"
-    tts_voice_reporter: str = "ko-KR-InJoonNeural"
+    tts_voice_reporter: str = "ko-KR-HyunsuMultilingualNeural"
     # 유료 게이트
     allow_paid: bool = False
     anthropic_api_key: str | None = None
