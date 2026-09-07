@@ -248,6 +248,7 @@ class LocalAIVideoProvider:
             pipe.transformer.set_attention_backend(self.s.ltx_attention_backend)
             pipe.enable_model_cpu_offload()  # T5 텍스트 인코더와 트랜스포머를 번갈아 GPU 에 올림
             pipe.vae.enable_tiling()
+            pipe.vae.enable_slicing()  # 161프레임 디코드 시 VRAM 급증 방지
             pipe.set_progress_bar_config(desc="LTX-Video", leave=False)
             self._pipe = pipe
         return self._pipe
@@ -268,6 +269,10 @@ class LocalAIVideoProvider:
             generator=torch.Generator(device="cuda").manual_seed(seed),
         ).frames[0]
         export_to_video(frames, str(out), fps=24)
+        del frames
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()  # 클립을 연달아 만들 때 VRAM 이 쌓여 Windows 가 RAM 으로 넘기는 것을 막는다
         return out
 
     def _best_clip(self, image, prompt: str, motion_prompt: str, kind: str, base_seed: int, out_dir: Path) -> Path:
