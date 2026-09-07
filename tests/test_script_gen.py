@@ -15,3 +15,7 @@ def test_prompt_mentions_topic_and_rules():
 def test_random_topic_is_pet_related():
     t = random_topic()
     assert any(k in t for k in ("강아지", "고양이", "댕댕이", "냥이"))
+
+
+def test_system_prompt_asks_short_punchline_and_closed_mouth():
+    assert "6자 이내" in SYSTEM_PROMPT and "mouth closed" in SYSTEM_PROMPT

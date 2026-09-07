@@ -25,6 +25,9 @@ class Settings:
     gemini_text_model: str = "gemini-3.5-flash"
     gemini_daily_text_cap: int = 50
     pollinations_daily_cap: int = 100
+    image_seed: int = 0  # 0이면 매번 랜덤, 그 외는 고정 (같은 캐릭터 재현)
+    image_style_suffix: str = ("mouth closed, looking at the camera, centered, full body visible, "
+                               "photorealistic, sharp focus, vertical 9:16")
     tts_voice_animal: str = "ko-KR-SunHiNeural"
     tts_voice_reporter: str = "ko-KR-InJoonNeural"
     # 유료 게이트
@@ -72,6 +75,8 @@ class Settings:
             gemini_text_model=g("GEMINI_TEXT_MODEL") or cls.gemini_text_model,
             gemini_daily_text_cap=_int(g("GEMINI_DAILY_TEXT_CAP"), cls.gemini_daily_text_cap),
             pollinations_daily_cap=_int(g("POLLINATIONS_DAILY_CAP"), cls.pollinations_daily_cap),
+            image_seed=_int(g("IMAGE_SEED"), cls.image_seed),
+            image_style_suffix=g("IMAGE_STYLE_SUFFIX") or cls.image_style_suffix,
             tts_voice_animal=g("TTS_VOICE_ANIMAL") or cls.tts_voice_animal,
             tts_voice_reporter=g("TTS_VOICE_REPORTER") or cls.tts_voice_reporter,
             allow_paid=_bool(g("ALLOW_PAID"), False),

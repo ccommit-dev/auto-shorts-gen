@@ -45,3 +45,13 @@ def test_pollinations_uses_ledger_and_saves(tmp_path):
     p = prov.generate("a cute dog", tmp_path / "scene.png")
     assert Image.open(p).size == PORTRAIT and led.count("pollinations") == 1
     assert "a%20cute%20dog" in sess.calls[0][0] and sess.calls[0][1]["width"] == 1080
+
+
+def test_pollinations_appends_style_suffix_and_fixed_seed(tmp_path):
+    buf = io.BytesIO()
+    Image.new("RGB", (576, 1024), "blue").save(buf, "JPEG")
+    sess = FakeSession(FakeResp(200, "image/jpeg", buf.getvalue()))
+    s = Settings(image_seed=77, image_style_suffix="mouth closed, looking at the camera")
+    PollinationsImageProvider(s, UsageLedger(tmp_path / "u.json"), session=sess).generate("a dog", tmp_path / "s.png")
+    url, params = sess.calls[0]
+    assert "mouth%20closed" in url and params["seed"] == 77

@@ -52,8 +52,10 @@ class PollinationsImageProvider:
     def generate(self, prompt: str, out_path: Path) -> Path:
         ensure_allowed(self.name, self.s.allow_paid)
         self.ledger.reserve(self.name, self.s.pollinations_daily_cap)
-        url = self.BASE + quote(prompt[:800], safe="")
-        params = {"width": 1080, "height": 1920, "nologo": "true", "seed": random.randint(1, 10 ** 9)}
+        full = f"{prompt}, {self.s.image_style_suffix}" if self.s.image_style_suffix else prompt
+        url = self.BASE + quote(full[:900], safe="")
+        seed = self.s.image_seed or random.randint(1, 10 ** 9)
+        params = {"width": 1080, "height": 1920, "nologo": "true", "seed": seed}
         last = None
         for attempt in range(3):
             resp = self.session.get(url, params=params, timeout=180)
@@ -82,8 +84,9 @@ class GeminiImageProvider:
         from google import genai
         from google.genai import types
         client = genai.Client(api_key=self.s.gemini_api_key)
+        full = f"{prompt}, {self.s.image_style_suffix}" if self.s.image_style_suffix else prompt
         resp = client.models.generate_content(
-            model=self.s.gemini_image_model, contents=prompt,
+            model=self.s.gemini_image_model, contents=full,
             config=types.GenerateContentConfig(response_modalities=["IMAGE"],
                                                image_config=types.ImageConfig(aspect_ratio="9:16")))
         for cand in resp.candidates or []:
