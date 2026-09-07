@@ -113,14 +113,20 @@ NVIDIA GPU(16GB VRAM 권장, RTX 5060 Ti에서 확인)가 있으면 오픈소스
 - RTX 5060 Ti 16GB 기준 영상 1개에 약 7분(모델 로드 1분 + 생성 2분 + 합성). VRAM 약 11.5GB.
 - RTX 50 시리즈에서는 cuDNN 어텐션이 매우 느리거나 CUDA 오류를 내므로 `LTX_ATTENTION_BACKEND=_native_efficient`가 기본입니다. VRAM이 넘치면 Windows가 시스템 RAM으로 넘겨 수십 배 느려지니 `LTX_WIDTH/HEIGHT/NUM_FRAMES`를 줄이세요.
 - 생성 설정은 `.env`의 `LTX_MODEL`, `LTX_WIDTH/HEIGHT`(32의 배수), `LTX_NUM_FRAMES`(8k+1), `LTX_STEPS`, `LTX_GUIDANCE`, `LTX_SEED`.
-- **말하는 클립과 듣는 클립을 각각 생성**(4초씩)하고, 자막 타이밍대로 강아지 대사 구간엔 말하는 클립, 기자 질문·간격엔 듣는 클립을 잘라 붙입니다. 역재생은 쓰지 않습니다. 한 줄이 클립보다 짧으면 이음새가 생기지 않습니다.
+- **말하는 클립, 듣는 클립, 펀치라인용 클로즈업 클립**을 각각 생성(기본 161프레임 ≈ 6.7초, 40스텝)하고, 자막 타이밍대로 잘라 붙입니다. 역재생은 쓰지 않습니다.
+- 컷마다 클립을 0초부터 재생해 첫 프레임(같은 장면 이미지)이 이어지고, 0.15초 크로스페이드로 남은 차이를 감춥니다. 0.4초 미만 구간은 이웃에 합칩니다.
+- `LTX_SEEDS=2`: 시드를 여러 개 만들어 움직임 점수(연속 프레임 평균 차이)가 목표(말하기 2.5, 듣기 1.0)에 가장 가까운 클립을 자동 선택합니다. `LTX_INTERPOLATE=true`: 24fps→30fps 보간. `LTX_CLOSEUP=true`: 펀치라인에 얼굴 클로즈업 컷.
+- 이 설정으로 RTX 5060 Ti 기준 영상 1개에 약 20분(클립 5개 생성). 빠르게 보려면 `LTX_SEEDS=1 LTX_CLOSEUP=false LTX_NUM_FRAMES=97 LTX_STEPS=30`.
 - `assets/clips`에 직접 넣을 때도 파일명에 `listen`이 들어간 mp4를 듣는 클립으로 씁니다(없으면 하나로 둘 다).
 - GPU가 없으면 `kenburns`가 대신 동작합니다. 이때도 동물 대사 구간에서만 통통 튀는 퍼펫 모션이 들어가 누가 말하는지 보입니다.
 
 ## 자막·연출
 
 - 자막은 edge-tts가 주는 어절별 시각(WordBoundary)에 맞춰 **어절이 하나씩 나타납니다**. 단어 타이밍이 없는 음성(ElevenLabs, dry-run)은 글자 수 비례로 균등 배치합니다.
-- 마지막 줄(펀치라인)은 앞에 0.5초 뜸을 두고, 노란색 큰 자막 + 화면 8% 줌인으로 강조합니다.
+- 마지막 줄(펀치라인)은 앞에 0.5초 뜸을 두고, 노란색 큰 자막 + 화면 8% 줌인 + "띠링" 효과음으로 강조합니다. 제목은 0.25초 팝인, 마지막 0.5초는 정지 프레임.
+- 소리: 대사에 가벼운 리버브, 컷마다 작은 "톡" 효과음, 전체 `loudnorm`(-16 LUFS). 줄마다 rate/pitch를 조금씩 바꿔 TTS 단조로움을 줄입니다. 기자 기본 음성은 `ko-KR-HyunsuMultilingualNeural`.
+- BGM: `assets/bgm`에 mp3를 넣으면 그걸 쓰고, 없으면 numpy로 합성한 저작권 없는 기본 루프(`default_bgm.mp3`)를 자동 생성합니다. 효과음도 `assets/sfx`에 자동 생성됩니다.
+- 장면 이미지: `IMAGE_SEED`로 같은 캐릭터를 재현하고, `IMAGE_STYLE_SUFFIX`(기본 "mouth closed, looking at the camera …")가 프롬프트 뒤에 붙어 입을 다문 정면 얼굴을 유도합니다.
 - 합성만 다시 하려면 `--resume <폴더> --redo overlays,compose` (타이밍이 바뀌면 `motion`도 포함).
 
 ## 내 소재 쓰기 (무료로 품질 올리기)
