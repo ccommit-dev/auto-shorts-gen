@@ -9,7 +9,7 @@ from typing import Protocol
 
 from .config import Settings
 from .cost_guard import ensure_allowed
-from .ffmpeg_tools import probe_duration, run_ffmpeg
+from .ffmpeg_tools import run_ffmpeg
 from .timing import Cue
 
 FPS = 30
@@ -48,30 +48,55 @@ def speaker_segments(cues: list[Cue] | None, total: float) -> list[tuple[float, 
     return [(round(s, 3), round(e, 3), k) for s, e, k in segs if e - s > 0.01]
 
 
+XFADE = 0.15          # 컷 크로스페이드 길이(초)
+MIN_SEGMENT = 0.4     # 이보다 짧은 구간은 앞 구간에 합친다 (크로스페이드보다 길어야 함)
+
+
+def merge_short_segments(segs: list[tuple[float, float, str]], min_len: float = MIN_SEGMENT) -> list[tuple[float, float, str]]:
+    """너무 짧은 구간은 이웃에 흡수하고, 같은 종류가 이어지면 합친다."""
+    out: list[list] = []
+    for s, e, k in segs:
+        if out and (e - s < min_len or out[-1][2] == k):
+            out[-1][1] = e
+        else:
+            out.append([s, e, k])
+    if len(out) > 1 and out[0][1] - out[0][0] < min_len:
+        out[1][0] = out[0][0]
+        out.pop(0)
+    return [(round(s, 3), round(e, 3), k) for s, e, k in out]
+
+
 def assemble_by_speaker(talk_clip: Path, listen_clip: Path, cues: list[Cue] | None, total: float,
                         out_path: Path) -> Path:
     """말하는 클립/듣는 클립을 화자 구간대로 잘라 이어 붙인다 (역재생 없음).
 
-    같은 종류의 구간이 이어지면 클립 안에서 이어서 재생하고, 클립 끝에 닿으면 처음으로 돌아간다.
-    구간이 클립보다 짧으면(보통 대사 한 줄) 이음새가 생기지 않는다.
+    두 클립은 같은 장면 이미지에서 시작하므로 구간마다 0초부터 재생하면 컷의 첫 프레임이 같아 이음새가
+    거의 보이지 않고, 남는 차이는 XFADE 크로스페이드로 감춘다. 크로스페이드 겹침만큼 각 구간을 길게
+    잘라 자막/음성 타임라인과 어긋나지 않게 한다.
     """
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    segs = speaker_segments(cues, total) or [(0.0, total, "listen")]
-    lengths = {"talk": probe_duration(talk_clip), "listen": probe_duration(listen_clip)}
+    segs = merge_short_segments(speaker_segments(cues, total) or [(0.0, total, "listen")])
     idx = {"talk": 0, "listen": 1}
-    cursor = {"talk": 0.0, "listen": 0.0}
-    parts = []
+    n = len(segs)
+    parts, lengths = [], []
     for i, (s, e, kind) in enumerate(segs):
         length = e - s
-        if cursor[kind] + length > lengths[kind]:
-            cursor[kind] = 0.0
-        off = cursor[kind]
-        parts.append(f"[{idx[kind]}:v]trim=start={off:.3f}:end={off + length:.3f},setpts=PTS-STARTPTS[s{i}]")
-        cursor[kind] = (off + length) % lengths[kind]
-    concat = "".join(f"[s{i}]" for i in range(len(segs))) + f"concat=n={len(segs)}:v=1:a=0,{_FIT_VF}[v]"
+        extra = XFADE if i < n - 1 else 0.0
+        parts.append(f"[{idx[kind]}:v]trim=start=0:end={length + extra:.3f},setpts=PTS-STARTPTS,{_FIT_VF}[s{i}]")
+        lengths.append(length)
+    if n == 1:
+        chain = "[s0]null[v]"
+    else:
+        steps, cur, offset = [], "s0", 0.0
+        for i in range(1, n):
+            offset += lengths[i - 1]
+            nxt = "v" if i == n - 1 else f"x{i}"
+            steps.append(f"[{cur}][s{i}]xfade=transition=fade:duration={XFADE}:offset={offset:.3f}[{nxt}]")
+            cur = nxt
+        chain = ";".join(steps)
     run_ffmpeg(["-stream_loop", "-1", "-i", str(talk_clip), "-stream_loop", "-1", "-i", str(listen_clip),
-                "-filter_complex", ";".join(parts + [concat]), "-map", "[v]", "-t", f"{total:.3f}",
+                "-filter_complex", ";".join(parts + [chain]), "-map", "[v]", "-t", f"{total:.3f}",
                 "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", str(out_path)])
     return out_path
 

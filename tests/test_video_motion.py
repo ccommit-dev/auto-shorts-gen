@@ -63,3 +63,22 @@ def test_loop_fit_clip_extends_forward(tmp_path):
     src = _clip(tmp_path / "src.mp4", "red", 1)
     out = loop_fit_clip(src, 3.0, tmp_path / "m.mp4")
     assert probe_resolution(out) == (1080, 1920) and abs(probe_duration(out) - 3.0) < 0.2
+
+
+def test_merge_short_segments_absorbs_tiny_and_adjacent_same_kind():
+    from shorts.video_gen import merge_short_segments
+    segs = [(0.0, 0.2, "listen"), (0.2, 1.5, "talk"), (1.5, 1.7, "listen"), (1.7, 3.0, "talk"), (3.0, 4.0, "listen")]
+    assert merge_short_segments(segs, min_len=0.4) == [(0.0, 3.0, "talk"), (3.0, 4.0, "listen")]
+
+
+def test_assemble_restarts_clips_and_crossfades(tmp_path):
+    talk = _clip(tmp_path / "talk.mp4", "red", 3)
+    listen = _clip(tmp_path / "listen.mp4", "blue", 3)
+    cues = [Cue(0.5, 1.0, "q", "reporter"), Cue(1.2, 2.2, "a", "animal")]
+    out = assemble_by_speaker(talk, listen, cues, 3.0, tmp_path / "m.mp4")
+    assert abs(probe_duration(out) - 3.0) < 0.2
+    # 컷 한가운데(1.275초)는 파랑/빨강이 섞인 크로스페이드 프레임
+    png = tmp_path / "mid.png"
+    run_ffmpeg(["-ss", "1.275", "-i", str(out), "-frames:v", "1", str(png)])
+    r, g, b = Image.open(png).convert("RGB").getpixel((540, 960))
+    assert r > 60 and b > 60
