@@ -97,8 +97,31 @@
       SC.push(s);
     }
     TOTAL = spec.total || t;
+    fitAll();
     seek(0);
     return { total: TOTAL, scenes: SC.length };
+  }
+
+  /* 생성된 대본은 문장 길이가 제각각이다. 넘치면 제목을 줄여 화면 밖으로 나가지 않게 한다. */
+  function fitAll() {
+    for (const s of SC) {
+      const prev = s.el.style.display;
+      s.el.style.display = "flex";
+      const h1 = s.el.querySelector("h1");
+      const col = s.el.querySelector(".col-text");
+      if (h1) {
+        const room = s.el.clientHeight - 150;
+        let size = parseFloat(getComputedStyle(h1).fontSize);
+        for (let i = 0; i < 18 && size > 26; i++) {
+          const over = s.el.scrollHeight > s.el.clientHeight + 1 ||
+            (col && col.offsetHeight > room) || h1.scrollWidth > h1.clientWidth + 1;
+          if (!over) break;
+          size *= 0.93;
+          h1.style.fontSize = size.toFixed(1) + "px";
+        }
+      }
+      s.el.style.display = prev || "none";
+    }
   }
 
   /* UI 장면: 커서가 토글을 하나씩 눌러 켜는 연출 */

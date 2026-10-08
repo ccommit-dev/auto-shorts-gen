@@ -28,7 +28,7 @@ body{
 .col-text{width:46%;flex:0 0 46%}
 .col-visual{flex:1;display:flex;align-items:center;justify-content:center;padding-left:72px}
 
-.eyebrow{display:flex;align-items:center;gap:14px;font-size:24px;font-weight:600;color:var(--ink-3);
+.eyebrow{display:flex;flex:0 0 auto;align-items:center;gap:14px;font-size:24px;font-weight:600;color:var(--ink-3);
   letter-spacing:-.01em;margin-bottom:34px}
 .scene.center .eyebrow{justify-content:center}
 .eyebrow::before{content:"";width:12px;height:12px;border-radius:50%;background:var(--accent);flex:0 0 12px}
@@ -77,8 +77,8 @@ h1 em{font-style:normal;color:var(--accent)}
 .stat .l{margin-top:26px;font-size:26px;color:var(--ink-2);font-weight:600;letter-spacing:-.02em}
 
 /* ---------- 마스코트 ---------- */
-.mascot{width:360px;height:360px}
-.scene.center .mascot{width:260px;height:260px;margin-bottom:46px}
+.mascot{width:360px;height:360px;flex:0 0 auto}
+.scene.center .mascot{width:260px;height:260px;flex:0 0 auto;margin-bottom:46px}
 .ring{position:absolute;border:2px solid var(--accent);border-radius:50%;opacity:.22}
 
 /* ---------- 진행 바 ---------- */
