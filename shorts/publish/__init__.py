@@ -7,7 +7,8 @@ from ..cost_guard import ensure_allowed
 from ..script_model import Script
 
 
-def publish_all(settings: Settings, script: Script, video_path: Path, targets, manifest) -> dict:
+def publish_all(settings: Settings, script: Script, video_path: Path, targets, manifest,
+                *, shorts: bool = True) -> dict:
     """대상별로 배포하고 결과를 manifest['publish']에 기록. 한 대상이 실패해도 나머지는 진행."""
     results: dict = {}
     for target in targets:
@@ -16,7 +17,7 @@ def publish_all(settings: Settings, script: Script, video_path: Path, targets, m
                 from .youtube import get_credentials, upload_short
                 ensure_allowed("youtube", settings.allow_paid)
                 creds = get_credentials(settings.youtube_client_secrets, settings.youtube_token)
-                vid = upload_short(video_path, script, settings.youtube_privacy, creds)
+                vid = upload_short(video_path, script, settings.youtube_privacy, creds, shorts)
                 results[target] = {"status": "done", "id": vid, "url": f"https://youtube.com/shorts/{vid}"}
             elif target == "instagram":
                 from .instagram import publish_reel

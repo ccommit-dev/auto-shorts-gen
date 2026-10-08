@@ -9,3 +9,5 @@ google-api-python-client>=2.190
 google-auth-oauthlib>=1.2
 anthropic>=1.0
 pytest>=9
+# 제품 소개 영상(promo 모드) 프레임 렌더링. 설치된 Edge/Chrome 을 쓴다.
+playwright>=1.49

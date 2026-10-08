@@ -54,6 +54,18 @@ class Settings:
     ltx_seeds: int = 2            # 시드 몇 개를 만들어 움직임이 적당한 클립을 고를지
     ltx_interpolate: bool = True  # 24fps → 30fps minterpolate 보간
     ltx_closeup: bool = True      # 펀치라인용 클로즈업 클립 추가 생성
+    # 모션 그래픽 제품 소개 영상 (promo 모드)
+    promo_width: int = 1920
+    promo_height: int = 1080
+    promo_fps: int = 30
+    promo_accent: str = "#1F7A45"
+    promo_voice: str = "ko-KR-HyunsuMultilingualNeural"
+    promo_browser: str = "msedge"       # msedge | chrome | chromium
+    promo_capture_quality: int = 95     # 프레임 JPEG 품질
+    promo_crf: int = 19                 # h264 품질 (낮을수록 고화질)
+    promo_bgm_gain: float = 0.08
+    promo_min_scene: float = 2.8        # 장면 최소 길이(초)
+    promo_lead: float = 0.5             # 장면 시작~나레이션 시작
     # 렌더링/출력
     font_path: str = "C:/Windows/Fonts/malgunbd.ttf"
     output_dir: str = "output"
@@ -104,6 +116,17 @@ class Settings:
             ltx_seeds=_int(g("LTX_SEEDS"), cls.ltx_seeds),
             ltx_interpolate=_bool(g("LTX_INTERPOLATE"), cls.ltx_interpolate),
             ltx_closeup=_bool(g("LTX_CLOSEUP"), cls.ltx_closeup),
+            promo_width=_int(g("PROMO_WIDTH"), cls.promo_width),
+            promo_height=_int(g("PROMO_HEIGHT"), cls.promo_height),
+            promo_fps=_int(g("PROMO_FPS"), cls.promo_fps),
+            promo_accent=g("PROMO_ACCENT") or cls.promo_accent,
+            promo_voice=g("PROMO_VOICE") or cls.promo_voice,
+            promo_browser=(g("PROMO_BROWSER") or cls.promo_browser).lower(),
+            promo_capture_quality=_int(g("PROMO_CAPTURE_QUALITY"), cls.promo_capture_quality),
+            promo_crf=_int(g("PROMO_CRF"), cls.promo_crf),
+            promo_bgm_gain=float(g("PROMO_BGM_GAIN") or cls.promo_bgm_gain),
+            promo_min_scene=float(g("PROMO_MIN_SCENE") or cls.promo_min_scene),
+            promo_lead=float(g("PROMO_LEAD") or cls.promo_lead),
             font_path=g("FONT_PATH") or cls.font_path,
             output_dir=g("OUTPUT_DIR") or cls.output_dir,
             assets_dir=g("ASSETS_DIR") or cls.assets_dir,

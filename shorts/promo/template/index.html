@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>promo</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="stage">
+  <div id="bg">
+    <div class="blob b1"></div>
+    <div class="blob b2"></div>
+    <div class="blob b3"></div>
+    <div class="grain"></div>
+  </div>
+  <div id="scenes"></div>
+  <div id="progress"><i></i></div>
+</div>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="leafGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#7FCB8F"/><stop offset="100%" stop-color="#2E9A57"/>
+    </linearGradient>
+    <radialGradient id="bodyGrad" cx="38%" cy="30%" r="78%">
+      <stop offset="0%" stop-color="#FFFFFF"/><stop offset="70%" stop-color="#F6F1E6"/>
+      <stop offset="100%" stop-color="#E4DACA"/>
+    </radialGradient>
+    <symbol id="mascot" viewBox="0 0 120 120">
+      <ellipse cx="60" cy="112" rx="34" ry="6" fill="#000" opacity=".10"/>
+      <path d="M58 40 C40 24 24 26 20 18 C34 10 54 18 58 36 Z" fill="url(#leafGrad)"/>
+      <path d="M62 40 C78 22 94 26 100 18 C86 8 66 16 62 36 Z" fill="url(#leafGrad)"/>
+      <rect x="57" y="30" width="6" height="18" rx="3" fill="#3FA468"/>
+      <circle cx="60" cy="74" r="34" fill="url(#bodyGrad)" stroke="#D9CDB8" stroke-width="1.5"/>
+      <ellipse cx="48" cy="72" rx="4.2" ry="5.4" fill="#2C2622"/>
+      <ellipse cx="72" cy="72" rx="4.2" ry="5.4" fill="#2C2622"/>
+      <ellipse cx="49.4" cy="70" rx="1.4" ry="1.7" fill="#fff"/>
+      <ellipse cx="73.4" cy="70" rx="1.4" ry="1.7" fill="#fff"/>
+      <ellipse cx="38" cy="82" rx="6" ry="4" fill="#F2A6AE" opacity=".65"/>
+      <ellipse cx="82" cy="82" rx="6" ry="4" fill="#F2A6AE" opacity=".65"/>
+      <path d="M53 84 Q60 91 67 84" stroke="#2C2622" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+    </symbol>
+  </defs>
+</svg>
+<script src="app.js"></script>
+</body>
+</html>

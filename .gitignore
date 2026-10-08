@@ -10,3 +10,6 @@ client_secrets.json
 models/
 assets/sfx/
 assets/bgm/default_bgm.mp3
+
+# 제품 소개 영상용 폰트 (scripts/download_fonts.py 로 받음, SIL OFL)
+assets/fonts/

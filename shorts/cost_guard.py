@@ -15,6 +15,7 @@ PROVIDERS: dict[str, ProviderInfo] = {
     "ltx": ProviderInfo(True, "로컬 GPU 오픈소스 LTX-Video image-to-video"),
     "local": ProviderInfo(True, "사용자가 넣은 파일"),
     "placeholder": ProviderInfo(True, "dry-run"),
+    "playwright": ProviderInfo(True, "설치된 브라우저로 로컬 렌더링, 비용 없음"),
     "youtube": ProviderInfo(True, "YouTube Data API 업로드"),
     "instagram": ProviderInfo(True, "Instagram Graph API"),
     "catbox": ProviderInfo(True, "catbox.moe 익명 호스팅"),

@@ -50,11 +50,12 @@ class TTSProvider(Protocol):
 
 ANIMAL_VARIATIONS = [("+8%", "+20Hz"), ("+4%", "+16Hz"), ("+12%", "+24Hz"), ("+6%", "+22Hz")]
 REPORTER_VARIATIONS = [("+0%", "+0Hz"), ("+3%", "+2Hz"), ("-2%", "-2Hz")]
+NARRATOR_VARIATIONS = [("+0%", "+0Hz")]  # 제품 소개 나레이션은 톤을 흔들지 않는다
 
 
 def voice_variation(speaker: str, index: int) -> tuple[str, str]:
     """줄마다 rate/pitch 를 조금씩 바꿔 같은 톤이 반복되는 TTS 티를 줄인다."""
-    table = ANIMAL_VARIATIONS if speaker == "animal" else REPORTER_VARIATIONS
+    table = {"animal": ANIMAL_VARIATIONS, "narrator": NARRATOR_VARIATIONS}.get(speaker, REPORTER_VARIATIONS)
     return table[index % len(table)]
 
 
@@ -64,7 +65,8 @@ class EdgeTTSProvider:
 
     def __init__(self, settings: Settings):
         ensure_allowed(self.name, settings.allow_paid)
-        self.voices = {"animal": settings.tts_voice_animal, "reporter": settings.tts_voice_reporter}
+        self.voices = {"animal": settings.tts_voice_animal, "reporter": settings.tts_voice_reporter,
+                       "narrator": settings.promo_voice}
 
     def synthesize(self, text: str, speaker: str, out_path: Path, index: int = 0) -> Path:
         import edge_tts
