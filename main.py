@@ -88,12 +88,16 @@ def run_promo(settings, args, ledger, publish, clear_steps) -> int:
     else:
         tts = EdgeTTSProvider(settings)
 
-    run_dir = Path(args.resume) if args.resume else None
-    if run_dir and args.redo:
-        clear_steps(PromoPaths(run_dir).manifest_json)
     brief = args.brief or args.topic or "우리 제품"
-    print(f"\n=== [promo] {brief} ===")
-    run_promo_pipeline(settings, tts, sp, brief, run_dir=run_dir, publish=publish)
+    if args.resume:
+        run_dir = Path(args.resume)
+        if args.redo:
+            clear_steps(PromoPaths(run_dir).manifest_json)
+        run_promo_pipeline(settings, tts, sp, brief, run_dir=run_dir, publish=publish)
+        return 0
+    for i in range(max(1, args.count)):
+        print(f"\n=== [promo {i + 1}/{args.count}] {brief} ===")
+        run_promo_pipeline(settings, tts, sp, brief, publish=publish)
     return 0
 
 
